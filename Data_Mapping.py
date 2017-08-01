@@ -6,6 +6,9 @@
 New in v2.4:
     Quintiq
         Updated taxonomy conversions
+        Reworked some outputs to debugging/missing
+        Added GCMF POs
+        Fixed some feedback/capacity bugs related to open POs
     Optimus
         N/A
     General
@@ -87,15 +90,14 @@ class MP_Mapping:
         self.print_missing()
 
         self.db._archive.close()
-        t_e = time.time()
-        print "<< Finished loading all data in ", "{0:.3f}".format(t_e-t_0), " seconds >>"
+        t_1 = time.time()
+        print "<< Finished loading all data in ", "{0:.3f}".format(t_1-t_0), " seconds >>"
         print " "
 
         # Create GUI
         # self.draw_GUI(window)
 
         # Remove redundant connections
-        t_0 = time.time()
         print "<< Removing redundant data (Quintiq MP) >>"
         print " "
         self.Q_RB = "RBD"
@@ -105,13 +107,12 @@ class MP_Mapping:
         #self.Q_COs = ['SOUTH SUDAN','ETHIOPIA','SOMALIA','KENYA','YEMEN'] # if [], self.Q_RB defines selection of salessegments
         self.Q_COs = []
         self.remove_bs()
-        t_e = time.time()
+        t_2 = time.time()
         print " "
-        print "<< Finished cleaning data in ", "{0:.3f}".format(t_e-t_0), " seconds >>"
+        print "<< Finished cleaning data in ", "{0:.3f}".format(t_2-t_1), " seconds >>"
         print " "
 
         # debug pre-export
-        t_0 = time.time()
         print "<< Exporting data to Excel >>"
         self.print_to_file(self.GCMF_Commodity,"GCMF Commodity Mapping",["Country","Project","Commodity","Index"])
         demands = {}
@@ -129,18 +130,18 @@ class MP_Mapping:
                   "Funded (Tactical)","Non-Funded (Tactical)","Implementation Plan (Tactical)",
                   "Implementation Plan (Pipeline)","Non-Funded (Pipeline)","Project Plan (Pipeline)"]
         self.print_to_file(demands,"Pipeline vs Tactical",header)
-        t_e = time.time()
-        print "<< Finished exporting in ", "{0:.3f}".format(t_e-t_0), " seconds >>"
+        self.print_to_file(self.Q_SpecificCommodities_S_NDP,"Availability by NDP",["NDP","Coms"])
+        t_3 = time.time()
+        print "<< Finished exporting in ", "{0:.3f}".format(t_3-t_2), " seconds >>"
         print " "
 
         # Export data
-        t_0 = time.time()
         print "<< Exporting data to Quintiq MP >>"
         print " "
         self.export_Quintiq()
-        t_e = time.time()
+        t_4 = time.time()
         print " "
-        print "<< Finished exporting data to Quintiq MP in ", "{0:.3f}".format(t_e-t_0), " seconds >>"
+        print "<< Finished exporting data to Quintiq MP in ", "{0:.3f}".format(t_4-t_3), " seconds >>"
         print " "
 
         # debug post-export
@@ -170,6 +171,8 @@ class MP_Mapping:
 ##        self.print_to_file(demand,"Demand vs Pipeline",header)
 
         # Wrapping up
+        print "<< Finished mapping algorithm in ", "{0:.3f}".format(t_4-t_0), " seconds >>"
+        print " "
 
     def load_data_master(self):
         '''
@@ -432,8 +435,8 @@ class MP_Mapping:
                     continue
                 elif c not in self.MD_Countries:
                     self.missing.append(["Country",c,"Country Mapping"])
-                else:
-                    self.CONV_Country[M[r][1]] = c
+                    continue
+                self.CONV_Country[M[r][1]] = c
             t_e = time.time()
             print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
 
@@ -451,10 +454,31 @@ class MP_Mapping:
                 ndp = M[r][2]
                 if ndp == None:
                     continue
-                elif ndp not in self.MD_Locations_NDPs:
+                elif ndp not in self.MD_Locations_NDPs and ndp != 0:
                     self.missing.append(["NDP",ndp,"NDP Mapping"])
                 else:
                     self.CONV_NDP[M[r][1]] = ndp
+            t_e = time.time()
+            print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
+
+            print "> Discharge Ports"
+            t_s = time.time()
+            ws = self.db['DP Mapping']
+            M = []
+            for row in ws:
+                line = []
+                for cell in row:
+                    line.append(cell.value)
+                M.append(line)
+            self.CONV_DP = {}
+            for r in range(2,len(M)):
+                dp = M[r][2]
+                if dp == None:
+                    continue
+                elif dp not in self.MD_Locations_DPs:
+                    self.missing.append(["DP",dp,"DP Mapping"])
+                else:
+                    self.CONV_DP[M[r][1]] = dp
             t_e = time.time()
             print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
 
@@ -561,7 +585,7 @@ class MP_Mapping:
             t_e = time.time()
             print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
 
-        def gcmf_coverage():
+        def gcmf():
             print "> GCMF Coverage"
             t_s = time.time()
             ws = self.db['GCMF Commodities']
@@ -600,6 +624,24 @@ class MP_Mapping:
                         continue
                 self.GCMF_Zone[co] = M[r][2]
 
+            print "> GCMF WBS"
+            t_s = time.time()
+            ws = self.db['GCMF WBS']
+            M = []
+            for row in ws:
+                line = []
+                for cell in row:
+                    line.append(cell.value)
+                M.append(line)
+            self.GCMF_WBS = {}
+            for r in range(2,len(M)):
+                wbs = M[r][1]
+                if wbs == None:
+                    continue
+                zone = M[r][2]
+                rb = M[r][3]
+                self.GCMF_WBS[wbs] = (zone, rb)
+
             t_e = time.time()
             print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
 
@@ -609,7 +651,7 @@ class MP_Mapping:
         general()
         less()
         po()
-        gcmf_coverage()
+        gcmf()
         t_e = time.time()
         print "Finished loading conversion tables in ", "{0:.3f}".format(t_e-t_0), " seconds"
         print " "
@@ -660,7 +702,7 @@ class MP_Mapping:
                 elif ('*',k0) in self.CONV_Commodity.keys():
                     k = self.CONV_Commodity['*',k0] # default conversion for this commodity
                 else:
-                    self.missing.append(["Commodity Conversion",k0 + " @ " + p,"Global Pipeline"])
+                    self.missing.append(["Commodity Conversion",k0 + " @ " + c + "_" + p,"Global Pipeline"])
                     continue
                 # Load info
                 self.PipelineDemand[c,p,d,k] = (M[r][7] if M[r][7]>0 else 0,M[r][9] if M[r][9]>0 else 0,M[r][6] if M[r][6]>0 else 0)
@@ -709,9 +751,9 @@ class MP_Mapping:
                 elif ('*',k0) in self.CONV_Commodity.keys():
                     k = self.CONV_Commodity['*',k0] # default conversion for this commodity
                 else:
-                    self.missing.append(["Commodity Conversion",k0 + " @ " + p,"Tactical Demand"])
+                    self.missing.append(["Commodity Conversion",k0 + " @ " + c + "_" + p,"Tactical Demand"])
                     continue
-                d = add_months([r][6],1) # date
+                d = add_months(M[r][6],1) # date
                 # Load info
                 self.TacticalDemand[c,p,d,k] = (M[r][10] if M[r][10]>0 else 0,M[r][11] if M[r][11]>0 else 0,M[r][7] if M[r][7]>0 else 0)
                 # NB: (Country, Project, Date, Commodity): (Funded, Non-Funded, Total)
@@ -1591,13 +1633,13 @@ class MP_Mapping:
                 if p not in self.MD_Projects:
                     self.missing.append(["Project",p,"FCR Rates"])
                     continue
-                k0 = M[r][3] # Commodity
+                k0 = M[r][3].upper() # Commodity
                 if (p,k0) in self.CONV_Commodity.keys():
                     k = self.CONV_Commodity[p,k0]
                 elif ('*',k0) in self.CONV_Commodity.keys():
                     k = self.CONV_Commodity['*',k0]
                 else:
-                    self.missing.append(["Conversion (LESS)",p + " @ " + k0,"FCR Rates"])
+                    self.missing.append(["Commodity Conversion",k0 + " @ " + c + "_" + p,"FCR Rates"])
                     continue
                 fcr = M[r][4] # FCR Rate
                 # Load info
@@ -1710,7 +1752,7 @@ class MP_Mapping:
                 elif ('*',k0) in self.CONV_Commodity.keys():
                     k = self.CONV_Commodity['*',k0]
                 else:
-                    self.missing.append(["Conversion (LESS)",p + " @ " + k0,"Inventory"])
+                    self.missing.append(["Commodity Conversion",k0 + " @ " + rc + "_" + p,"Inventory"])
                     continue
                 if wbs[:2] != "S.": # CO owned inventory
                     if rc == "null":
@@ -1722,14 +1764,14 @@ class MP_Mapping:
                             self.missing.append(["Recipient Country","null","Inventory"])
                             continue
                     if rc not in self.MD_Countries:
-                        self.missing.append(["CO",rc,"Inventory"])
+                        self.missing.append(["Recipient Country",rc,"Inventory"])
                         continue
                     if (rc,sc) in self.CONV_LESS_Location.keys():
                         loc = self.CONV_LESS_Location[rc,sc] # loc is a CO, NDP, or DP
                     elif rc == sc:
                         loc = rc # loc is a CO
                     else:
-                        self.missing.append(["Conversion (LESS)",rc + ", " + sc,"Inventory"])
+                        self.missing.append(["Location Mapping (LESS)",rc + ", " + sc,"Inventory"])
                         continue
                     inv = sum(M[r][i] for i in [11,12] if M[r][i] != None) # Inventory (MT)
                     itr = sum(M[r][i] for i in [9,10,13] if M[r][i] != None) # In Transit (MT)
@@ -1745,7 +1787,7 @@ class MP_Mapping:
                     if sc in self.CONV_LESS_LocationLink.keys():
                         loc = self.CONV_LESS_LocationLink[sc]
                     else:
-                        self.missing.append(["Conversion (LESS)","GCMF @ " + sc,"Inventory"])
+                        self.missing.append(["Location Mapping (LESS)","GCMF @ " + sc,"Inventory"])
                         continue
                     inv = sum(M[r][i] for i in [7,8] if M[r][i] != None) # Inventory (MT)
                     itr = M[r][6] # In Transit (MT)
@@ -1782,19 +1824,24 @@ class MP_Mapping:
             history = []
             for r in range(8,len(M)):
                 # Verify master data integrity
-                pon = M[r][1][:10] # PO Number
+                poi = M[r][1] # PO Item (unique)
+                pon = poi[:10] # PO Number (not unique)
                 pod = M[r][2] # PO Date
-                rc = M[r][10] # Recipient Country
-                if rc in self.CONV_Country.keys():
-                    rc = self.CONV_Country[rc]
-                else:
-                    self.missing.append(["RC Conversion",rc,"PO Report"])
-                    continue
-                p = str(M[r][15]) # Project
+                wbs = str(M[r][19]) # WBS
+                p = wbs[:6] # Project
                 if p not in self.MD_Projects:
                     self.missing.append(["Project",p,"PO Report"])
                     continue
-                k0 = M[r][6] # Procured Commodity
+                rc = M[r][12] # Recipient Country
+                if rc in self.CONV_Country.keys():
+                    rc = self.CONV_Country[rc]
+                else:
+                    if p.startswith("S"):
+                        rc = "GCMF"
+                    else:
+                        self.missing.append(["RC Conversion",rc,"PO Report"])
+                        continue
+                k0 = M[r][8] # Procured Commodity
                 if k0 == None or k0 == "":
                     continue
                 k0 = k0.upper()
@@ -1805,21 +1852,21 @@ class MP_Mapping:
                 elif k0 in self.MD_Commodities:
                     sk = k0
                 else:
-                    self.missing.append(["Commodity Conversion",k0 + " @ " + p,"PO Report"])
+                    self.missing.append(["Commodity Conversion",k0 + " @ " + rc + "_" + p,"PO Report"])
                     continue
-                usd = M[r][9] # $/MT
-                mt = M[r][8] # MT purchased
-                inc = M[r][13] # Incoterm
-                b = M[r][16] # PO-GR Balance (MT)
+                usd = M[r][11] # $/MT
+                mt = M[r][10] # MT purchased
+                inc = M[r][15] # Incoterm
+                b = M[r][20] # PO-GR Balance (MT)
                 pot = M[r][5] # PO Type
                 if pot == "POFC" or pot == "POFW": # int'l/reg'l/local procurement (incl. procurement by GCMF)
-                    oc = M[r][7] # Origin Country
+                    oc = M[r][9] # Origin Country
                     if oc not in self.MD_Countries:
                         self.missing.append(["Country",oc,"PO Report"])
                         continue
-                    sd_f = M[r][11] # Ship From Date
-                    sd_t = M[r][12] # Ship To Date
-                    ndp = M[r][14] # Named Delivery Place
+                    sd_f = M[r][13] # Ship From Date
+                    sd_t = M[r][14] # Ship To Date
+                    ndp = M[r][16] # Named Delivery Place
                     if ndp in self.CONV_NDP.keys():
                         ndp = self.CONV_NDP[ndp]
                         if ndp == 0: # Unmappable NDP
@@ -1846,7 +1893,10 @@ class MP_Mapping:
                     self.Procurement_Cost[key] = usd
                     self.Procurement_Date[key] = pod # As Of Date not known/relevant
                     if b > 0: # Still waiting for some MTs -> use as feedback (open PO)
-                        self.OpenPOs[rc,p,pon,sk,0,oc,ndp,sd_t] = b
+                        if p.startswith("S"): # GCMF -> need WBS
+                            self.OpenPOs[rc,wbs,poi,sk,0,oc,ndp,sd_t] = b
+                        else: # Normal procurement -> project is enough
+                            self.OpenPOs[rc,p,poi,sk,0,oc,ndp,sd_t] = b
                     kt = self.MD_Commodities_Type[sk]
                     g = self.MD_Commodities_Group[sk]
                     skt = kt + " (FOOD - " + g + ")"
@@ -1857,7 +1907,7 @@ class MP_Mapping:
                     ic = self.MD_Locations_Country[ndp]
                     history.append((rc,p,sk,pot,oc,ic,ndp,mt))
                 elif pot == "POFI": # Type = POFI -> In-Kind donation
-                    ndp = M[r][14] # Named Delivery Place
+                    ndp = M[r][16] # Named Delivery Place
                     if ndp in self.CONV_NDP.keys():
                         ndp = self.CONV_NDP[ndp]
                         if ndp == 0: # Unmappable NDP
@@ -1869,12 +1919,18 @@ class MP_Mapping:
                         self.missing.append(["NDP Conversion",ndp,"PO Report"])
                         continue
                     ic = self.MD_Locations_Country[ndp] # Incoterm country
-                    oc = M[r][7] # Donor Country
+                    oc = M[r][9] # Donor Country
                     if oc not in self.MD_Countries:
                         oc = ic
-                    sd_t = M[r][12] # Ship To Date
+                    sd_t = M[r][14] # Ship To Date
+                    dp0 = M[r][17]
+                    if dp0 in self.CONV_DP.keys():
+                        dp = self.CONV_DP[dp0]
+                    else:
+                        dp = None
+                        self.missing.append(["DP Conversion",dp,"PO Report"])
                     # Load info
-                    key = (oc,sk,ndp,sd_t,1,None,rc,p)
+                    key = (oc,sk,ndp,sd_t,1,dp,rc,p)
                     if b >= 0:
                         self.Donation[key] = b
                     if (oc,ndp,sk) not in self.IK_Price.keys():
@@ -1892,11 +1948,13 @@ class MP_Mapping:
                         self.GCMF_Price[p,sk] = (usd, pod)
                     elif pod > self.GCMF_Price[p,sk][1]: # This entry is newer
                         self.GCMF_Price[p,sk] = (usd, pod)
-                    ipo = M[r][1][:10] # IPO number
-                    if ipo not in self.CONV_ZFPF.keys():
-                        self.missing.append(["IPO Conversion",ipo,"PO Report"])
-                        continue
-                    po = self.CONV_ZFPF[ipo]
+                    po = M[r][18][:10] # PO number linked to IPO
+                    ipo = pon # IPO number
+                    if po == None:
+                        if ipo not in self.CONV_ZFPF.keys():
+                            self.missing.append(["IPO Conversion",ipo,"PO Report"])
+                            continue
+                        po = self.CONV_ZFPF[ipo]
                     if po not in self.PO_Origins.keys():
                         self.missing.append(["PO Origin",po,"PO Report"])
                         continue
@@ -2180,10 +2238,20 @@ class MP_Mapping:
             check = 0
         if check == 1: # LIST = dictionary
             for key in sorted(LIST.keys()):
-                try:
-                    row = key + (LIST[key],) # add the value to the key-tuple
-                except: # value is a tuple
-                    row = key + LIST[key]
+                # turn pointer into tuple
+                if isinstance(key,tuple):
+                    t_key = key
+                else:
+                    t_key = (key,)
+                # turn value into tuple
+                v = LIST[key]
+                if isinstance(v,tuple):
+                    row = t_key + v
+                elif isinstance(v,list):
+                    row = t_key + tuple(v)
+                else: # single value
+                    row = t_key + (v,)
+                # print row
                 try:
                     ws.append(row)
                 except:
@@ -2433,7 +2501,6 @@ class MP_Mapping:
                 if sk not in self.Q_SpecificCommodities_GMO.keys():
                     # no procurement option found for this specific commodity
                     self.weird.append(["Commodity has demand but can't be procured",sk])
-                    self.Q_Commodities.remove(k)
                     continue
                 if gmo == 1 and self.Q_SpecificCommodities_GMO[sk] == 0:
                     # no procurement option exists for the GMO version of this specific commodity
@@ -2597,7 +2664,14 @@ class MP_Mapping:
                     self.weird.append(["No demand for donated commodity",kp])
                     continue
                 self.Q_Donation.append((don,sk,o,aod,dur,cor,c,p))
-                if sk not in self.Q_SpecificCommodities_S_NDP[o]:
+                if o not in self.Q_SpecificCommodities_S_NDP.keys():
+                    self.Q_SpecificCommodities_S_NDP[o] = [sk]
+                    if o not in self.Q_NDPs:
+                        self.Q_NDPs.append(o)
+                    ndp_c = self.MD_Locations_Country[o]
+                    if ndp_c not in self.Q_Countries:
+                        self.Q_Countries.append(ndp_c)
+                elif sk not in self.Q_SpecificCommodities_S_NDP[o]:
                     self.Q_SpecificCommodities_S_NDP[o].append(sk)
             t_e = time.time()
             print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
@@ -2624,18 +2698,26 @@ class MP_Mapping:
             t_s = time.time()
             self.Q_OpenPOs = []
             for rc,p,po,sk,gmo,oc,ndp,d in self.OpenPOs.keys():
-                if (rc,p) not in self.Q_SalesSegments:
-                    continue
                 if diff_month(d,self.Q_Start_Planning) < -2:
                     continue
-                gmo_s = " [GMO]" if gmo==1 else " [Non GMO]"
-                k = sk + "_" + rc + "_" + p + gmo_s
-                if k not in self.Q_Commodities:
-                    self.weird.append(["Found PO but no demand for",k])
-                    continue
-                if (oc,ndp,sk,gmo) not in self.Q_Procurement_NoDate:
-                    self.weird.append(["Found PO but no matching procurement option for",oc,ndp,sk,gmo])
-                    continue
+                if p.startswith("S"):
+                    if self.GCMF_WBS[p][1] != self.Q_RB:
+                        continue # intended for different GCMF zone
+                    if sk not in self.Q_GCMF_Commodities:
+                        self.Q_GCMF_Commodities.append(sk)
+                    if (ndp,sk) not in self.Q_GCMF:
+                        self.Q_GCMF.append((ndp,sk))
+                else:
+                    if (rc,p) not in self.Q_SalesSegments:
+                        continue # not a relevant country-project combination
+                    gmo_s = " [GMO]" if gmo==1 else " [Non GMO]"
+                    k = sk + "_" + rc + "_" + p + gmo_s
+                    if k not in self.Q_Commodities:
+                        self.weird.append(["Found PO but no demand for",k])
+                        continue
+                    if (oc,ndp,sk,gmo) not in self.Q_Procurement_NoDate:
+                        self.weird.append(["Found PO but no matching procurement option for",oc,ndp,sk,gmo])
+                        continue
                 self.Q_OpenPOs.append((rc,p,po,sk,gmo,oc,ndp,d))
             t_e = time.time()
             print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
@@ -2672,6 +2754,8 @@ class MP_Mapping:
                     self.Q_Supply[c,p,sk] = 0
                 self.Q_Supply[c,p,sk] += inv + itr
             for c,p,po,sk,gmo,oc,ndp,d in self.Q_OpenPOs:
+                if p.startswith("S"):
+                    continue # GCMF
                 q = self.OpenPOs[c,p,po,sk,gmo,oc,ndp,d]
                 pod = add_months(d,-2)
                 if diff_month(self.Q_Start_Planning,pod) <= 0: # PO starts during planning horizon
@@ -2728,7 +2812,7 @@ class MP_Mapping:
         unprogrammed()
         bbd()
         print "> Exporting weird occurences to 'Debugging.xlsx'"
-        self.print_to_file(self.weird,"Weird occurences",["Type","Details"])
+        self.print_to_file(self.weird,"Weird occurences (mapping)",["Type","Details"])
 
     def export_Quintiq(self):
         '''
@@ -2782,7 +2866,7 @@ class MP_Mapping:
             for k in self.Q_Commodities:
                 sk = self.Q_Commodities_SpecCom[k]
                 if sk not in self.CommodityIntake.keys():
-                    print "No Container conversion rate found for:",sk
+                    self.weird.append(("No Container conversion rate found",sk))
                     continue
                 ws.append([self.CommodityIntake[sk],"TRUE",k,"Container","MT"])
 
@@ -2951,6 +3035,7 @@ class MP_Mapping:
                     priority = "Q" + str(int(ratio))
                 else:
                     priority = "Q1"
+                    self.weird.append(("No Commodity priority",sk,p))
                 r += 1
                 ws.append([r,datetime.datetime(9999, 12, 31),"FALSE",k,"","FALSE",k,"",kp,"",160,datetime.datetime(1900, 1, 1),"MT",gmo,priority,bulk])
             # Level 3 & 4 - GCMF Pegged Commodities
@@ -3092,7 +3177,13 @@ class MP_Mapping:
                     self.Q_Operations[oname] = (k,k,o,"Donation")
                 # Unloading operations
                 rnumber = {}
+                gcmf_check =  []
                 for dp in self.Q_DPs:
+                    if dp in self.Handling_Dur.keys():
+                        dur = self.Handling_Dur[dp]
+                    else:
+                        dur = 0
+                        self.weird.append(("No handling time for port",dp))
                     for k in self.Q_Commodities_D_DP[dp]:
                         sk,gmo = self.Q_Commodities_SpecCom[k], self.Q_Commodities_GMO[k]
                         c,p = self.Q_Commodities_Segment[k]
@@ -3110,13 +3201,18 @@ class MP_Mapping:
                             rnumber[sk,dpt,gmo] += 1
                             ws1.append([rstep,rname,rnumber[sk,dpt,gmo]])
                             oname = "Unloading " + k + " in " + dpt
-                            if dp in self.Handling_Dur.keys():
-                                dur = self.Handling_Dur[dp]
-                            else:
-                                dur = 0
                             ws2.append(["FALSE","FALSE",oname,"TRUE",0,0,0,rname,rstep,"0:00:00.00",1,dpt,str(dur) + " days"])
                             ws3.append([1,"FALSE","TRUE",1,1,oname,"",k,1,dpt])
                             ws3.append([1,"FALSE","FALSE",1,1,oname,"",k,1,dp])
+                            if dp in self.GCMF_Ports and self.GCMF_Commodity[c,p,sk]==1 and gmo==0 and (dpt,sk) not in gcmf_check:
+                                rstep = "GCMF_" + dpt
+                                ws1.append([rstep,rname,1])
+                                gk = sk + "_GCMF [Non GMO]"
+                                oname = "Unloading " + gk + " in " + dpt
+                                ws2.append(["FALSE","FALSE",oname,"TRUE",0,0,0,rname,rstep,"0:00:00.00",1,dpt,str(dur) + " days"])
+                                ws3.append([1,"FALSE","TRUE",1,1,oname,"",gk,1,dpt])
+                                ws3.append([1,"FALSE","FALSE",1,1,oname,"",gk,1,dp])
+                                gcmf_check.append((dpt,sk))
                 wb.save(filename = path1)
 
             t_e = time.time()
@@ -3139,6 +3235,7 @@ class MP_Mapping:
             r = 0
             # NDP - DP lanes (shipping)
             self.Q_Bulk_Coms = {}
+            check_gcmf = []
             for lane in sorted(self.Q_Shipping):
                 lp,dp = lane[0],lane[1]
                 if lp not in self.Q_DPs:
@@ -3154,14 +3251,14 @@ class MP_Mapping:
                     if valid == 0: # LP can't ship any commodities that this DP needs
                         self.Q_Shipping.remove(lane)
                         continue
+                if lane in self.Shipping_Duration.keys():
+                    lt = self.Shipping_Duration[lane]*24
+                else:
+                    lt = 40*24 # if the lead time is 0 I can't use the lane :(
+                    self.weird.append(("No lead time found for lane",lp,dp))
                 for t in self.MD_ShippingTypes:
                     name = "Ship from " + lp + " to " + dp + " in " + t
                     dpt = dp + " [" + t + "]"
-                    if lane in self.Shipping_Duration.keys():
-                        lt = self.Shipping_Duration[lane]*24
-                    else:
-                        lt = 40*24 # if the lead time is 0 I can't use the lane :(
-                        # print "<< WARNING >> No lead time found for lane: ",lane
                     if t == "Container":
                         activated = "TRUE"
                     elif ("",dp,t) in self.Bulk_Lanes:
@@ -3193,6 +3290,11 @@ class MP_Mapping:
                                         self.Q_Bulk_Coms[lp,dp] = []
                                     self.Q_Bulk_Coms[lp,dp].append((sk,gmo))
                                 ws1.append(["FALSE",name_b,k])
+                                if (lp,dp,t,sk,gmo) not in check_gcmf:
+                                    check_gcmf.append((lp,dp,t,sk,gmo))
+                                    if dp in self.GCMF_Ports and sk in self.Q_GCMF_Commodities:
+                                        gk = sk + "_GCMF" + gmo_s
+                                        ws1.append(["FALSE",name_b,gk])
                             else:
                                 if sk in self.Q_SpecificCommodities_S_NDP[lp]:
                                     name_b = name + " (" + sk + gmo_s + ")"
@@ -3205,6 +3307,11 @@ class MP_Mapping:
                                             self.Q_Bulk_Coms[lp,dp] = []
                                         self.Q_Bulk_Coms[lp,dp].append((sk,gmo))
                                     ws1.append(["FALSE",name_b,k])
+                                    if (lp,dp,t,sk,gmo) not in check_gcmf:
+                                        check_gcmf.append((lp,dp,t,sk,gmo))
+                                        if dp in self.GCMF_Ports and sk in self.Q_GCMF_Commodities:
+                                            gk = sk + "_GCMF" + gmo_s
+                                            ws1.append(["FALSE",name_b,gk])
                     elif t == "Break-Bulk" or t == "Container":
                         ws0.append([datetime.datetime(9999, 12, 31),name,activated,name,"00:00:00",datetime.datetime(1900, 1, 1),t,str(lt)+":00:00.00"])
                         for k in self.Q_Commodities_D_DP[dp]:
@@ -3217,13 +3324,23 @@ class MP_Mapping:
                                 continue
                             if lp in self.Q_DPs:
                                 ws1.append(["FALSE",name,k])
+                                if (lp,dp,t,sk) not in check_gcmf:
+                                    check_gcmf.append((lp,dp,t,sk))
+                                    if dp in self.GCMF_Ports and sk in self.Q_GCMF_Commodities:
+                                        gk = sk + "_GCMF" + gmo_s
+                                        ws1.append(["FALSE",name,gk])
                             else:
                                 if sk in self.Q_SpecificCommodities_S_NDP[lp]:
                                     ws1.append(["FALSE",name,k])
+                                    if (lp,dp,t,sk) not in check_gcmf:
+                                        check_gcmf.append((lp,dp,t,sk))
+                                        if dp in self.GCMF_Ports and sk in self.Q_GCMF_Commodities:
+                                            gk = sk + "_GCMF" + gmo_s
+                                            ws1.append(["FALSE",name,gk])
                         r += 1
                         ws2.append([dpt,datetime.datetime(9999, 12, 31),"FALSE","FALSE","TRUE",name,r,lp,"0:00:00.00",datetime.datetime(1900, 1, 1),str(lt)+":00:00.00"])
                     else:
-                        print "<<<WARNING>>> Shipping type not accounted for:",t
+                        self.weird.append(("Shipping type not accounted for",t))
 
             # DP - CO lanes (inland/overland transport)
             for dp,c in self.Q_Transport_DP2CO:
@@ -3231,7 +3348,7 @@ class MP_Mapping:
                     lt = self.Transport_Dur[dp,c]*24
                 else:
                     lt = 40*24 # if the lead time is 0 I can't use the lane :(
-                    # print "<< WARNING >> No lead time found for lane: ",lane
+                    self.weird.append(("No lead time found for lane",dp,c))
                 if self.MD_Locations_Country[dp] == self.MD_Locations_Country[c]:
                     unit = "Road - Inland"
                 else:
@@ -3252,7 +3369,7 @@ class MP_Mapping:
                     lt = self.Transport_Dur[ndp,c]*24
                 else:
                     lt = 40*24 # if the lead time is 0 I can't use the lane :(
-                    # print "<< WARNING >> No lead time found for lane: ",lane
+                    self.weird.append(("No lead time found for lane",ndp,c))
                 projects = [p for (co,p) in self.Q_SalesSegments if co == c] # Identify relevant projects
                 for p in projects:
                     name = "Truck from " + ndp + " to " + c + " for " + p
@@ -3322,7 +3439,8 @@ class MP_Mapping:
                     if (c,p) in self.DSC.keys():
                         dsc = self.DSC[c,p]*100
                     else:
-                        dsc = 0
+                        dsc = 20
+                        self.weird.append(("DSC missing",c,p))
                     ws.append([budget_f[c,p]/T*2,name,d,dsc,""])
             # NB: this is just to test - now every project can spend at most X its average monthly budget in one month
 
@@ -3358,19 +3476,19 @@ class MP_Mapping:
                     priority = self.Project_Priority[c,p]
                 else:
                     priority = "L1"
-                    print "<<<WARNING>>> No Project Priority detected for:",p
+                    self.weird.append(("No Project Priority detected for",c,p))
                 if (c,p) in self.DSC.keys():
                     dsc = self.DSC[c,p]
                 else:
                     dsc = .2
-                    print "<<<WARNING>>> No DSC detected for:",c,p
+                    self.weird.append(("DSC missing",c,p))
                 if (c,p) in discounting.keys():
                     discount = discounting[c,p]
                 else:
                     discount = 0
                 exp_FCR = budget_f[c,p] - discount # discount available budget with stocks
                 if exp_FCR < 0:
-                    print "<<<WARNING>>> More discounting cost than available budget for",c,p
+                    self.weird.append(("More discounting cost than available budget",c,p))
                     exp_FCR = 0
                 exp_DOC = exp_FCR / 1.07 / (1 + dsc) # discount available budget with DSC and ISC
                 ws.append([r,"TRUE",l2,l1,priority,exp_DOC])
@@ -3471,7 +3589,7 @@ class MP_Mapping:
                         sr = self.Shipping_Rate[lane] * conv[t]
                     else:
                         sr = 0
-                        print "Missing shipping rate for lane:",lane
+                        self.weird.append(("Missing shipping rate",lane))
                     pc = 100 if t != "Container" else 2200
                     # appropriate cost tbd!! 100 is pretty good performance, but still some direct shipments occurring - investigate
                     if t != "Bulk":
@@ -3499,8 +3617,8 @@ class MP_Mapping:
                     if (dp,c) in self.Transport_Cost.keys():
                         otc = self.Transport_Cost[dp,c]
                     else:
-                        otc = 0
-                        print "Missing Overland Transport cost for",dp,c
+                        otc = 50
+                        self.weird.append(("Missing Overland Transport cost",dp,c))
                 else: # Inland
                     otc = ""
                 for p in projects:
@@ -3508,11 +3626,11 @@ class MP_Mapping:
                     if (c,p) in self.LTSH.keys():
                         ltsh = self.LTSH[c,p]["Overseas"] # Overseas rate
                         if ltsh == (0,0):
-                            print "Missing Overseas LTSH rate for",c,p
+                            self.weird.append(("Missing Overseas LTSH rate",c,p))
                             ltsh = self.LTSH[c,p]["Average"] # Average rate
                     else:
                         ltsh = (0,0)
-                        print "Missing LTSH rates for CO:",c
+                        self.weird.append(("Missing LTSH rates",c,p))
                     if otc == "": # Inland
                         r += 1
                         ws.append(["LTSH",sum(ltsh),"Volume",r,name,1,self.Q_Start_Horizon,"Day"]) # OVL + ITSH
@@ -3527,19 +3645,19 @@ class MP_Mapping:
                 if (ndp,c) in self.Transport_Cost.keys():
                     otc = self.Transport_Cost[ndp,c]
                 else:
-                    otc = 0
-                    print "Missing Overland Transport cost for",dp,c
+                    otc = 50
+                    self.weird.append(("Missing Overland Transport cost",dp,c))
                 projects = [p for (co,p) in self.Q_SalesSegments if co == c] # Identify relevant projects
                 for p in projects:
                     name = "Truck from " + ndp + " to " + c + " for " + p
                     if (c,p) in self.LTSH.keys():
                         ltsh = self.LTSH[c,p]["Regional"] # Regional rate
                         if ltsh == (0,0):
-                            print "Missing Regional LTSH rate for",c,p
+                            self.weird.append(("Missing Regional LTSH rate",c,p))
                             ltsh = self.LTSH[c,p]["Average"] # Average rate
                     else:
                         ltsh = (0,0)
-                        print "Missing LTSH rates for CO:",c
+                        self.weird.append(("Missing LTSH rates",c,p))
                     r += 1
                     ws.append(["LTSH",ltsh[1],"Volume",r,name,1,self.Q_Start_Horizon,"Day"]) # only ITSH
                     r += 1
@@ -3557,11 +3675,11 @@ class MP_Mapping:
                         if (c,p) in self.LTSH.keys():
                             ltsh = self.LTSH[c,p]["Local"] # Local rate
                             if ltsh == (0,0):
-                                print "Missing Local LTSH rate for",c,p
+                                self.weird.append(("Missing Local LTSH rate",c,p))
                                 ltsh = self.LTSH[c,p]["Average"] # Average rate
                         else:
                             ltsh = (0,0)
-                            print "Missing LTSH rates for CO:",c
+                            self.weird.append(("Missing LTSH rates",c,p))
                         r += 1
                         ws.append(["LTSH",sum(ltsh),"Volume",r,name,1,self.Q_Start_Horizon,"Day"]) # ITSH + OVL
 
@@ -3573,8 +3691,8 @@ class MP_Mapping:
                     if (c,p) in self.ODOC.keys():
                         odoc = self.ODOC[c,p]
                     else:
-                        odoc = 0
-                        print "Missing ODOC rate for:",c,p
+                        odoc = 50
+                        self.weird.append(("Missing ODOC rate",c,p))
                     r += 1
                     ws.append(["ODOC",odoc,"Volume",r,name,1,self.Q_Start_Horizon,"Day"])
 
@@ -3659,8 +3777,7 @@ class MP_Mapping:
                     ws.append(["Sourcing cost",cost,"Volume",r,1,oname,self.Q_Start_Horizon,"Day"])
                     check.append(oname)
                 else:
-                    print "<Warning> Missing cost for donation:"
-                    print " ",oname
+                    self.weird.append(("Missing cost for donation",don,o,sk))
             # GCMF procurement
             for loc,sk in self.Q_GCMF:
                 rname = "Buy " + sk + " from GCMF at " + loc
@@ -3698,8 +3815,8 @@ class MP_Mapping:
                         if (dp,t) in self.Handling_Cost.keys():
                             hc = self.Handling_Cost[dp,t]
                         else:
-                            hc = 0
-                            print "Missing handling cost for:",dp,t
+                            hc = 20
+                            self.weird.append(("Missing handling cost",dp,t))
                         r += 1
                         ws.append(["Handling cost",hc,"Volume",r,1,oname,self.Q_Start_Horizon,"Day"])
 ##                        if dp in self.GCMF_Ports:
@@ -3781,6 +3898,8 @@ class MP_Mapping:
                     k = sk + "_GCMF [Non GMO]"
                     d1 = self.Q_Start_Planning
                     d2 = add_months(d1,1)
+                    if (self.Q_RB,loc,sk) not in self.GCMF.keys():
+                        continue # currently no inventory
                     inv,itr = self.GCMF[self.Q_RB,loc,sk]
                     if loc in self.Q_COs:
                         if inv > 0:
@@ -3851,8 +3970,11 @@ class MP_Mapping:
                     pod = add_months(d,-2)
                     if diff_month(self.Q_Start_Planning,pod) <= 0: # PO starts during planning horizon
                         continue
-                    gmo_s = " [GMO]" if gmo==1 else " [Non GMO]"
-                    k = sk + "_" + rc + "_" + p + gmo_s
+                    if p.startswith("S"):
+                        k = sk + "_GCMF [Non GMO]"
+                    else:
+                        gmo_s = " [GMO]" if gmo==1 else " [Non GMO]"
+                        k = sk + "_" + rc + "_" + p + gmo_s
                     aod = max(d,self.Q_Start_Planning)
                     #NB: POs that should have arrived in the last 2 months are estimated to arrive during the first month of the planning horizon
                     r += 1
@@ -3913,6 +4035,7 @@ class MP_Mapping:
                 if dp in self.Storage_Capacity.keys():
                     cap = self.Storage_Capacity[dp]
                 else:
+                    self.weird.append(("No capacity known",dp))
                     continue # no capacity known --> setting to 0 gets messy when adding existing inventories
                 ws.append([cap,self.Q_Start_Horizon,dp])
             for ndp in self.Q_NDPs:
@@ -3924,6 +4047,7 @@ class MP_Mapping:
                 if co in self.Storage_Capacity_Country.keys():
                     cap = self.Storage_Capacity_Country[co]
                 else:
+                    self.weird.append(("No capacity known",co))
                     continue # no capacity known --> setting to 0 gets messy when adding existing inventories
                 ws.append([cap,self.Q_Start_Horizon,co + " [WH]"])
 
@@ -4002,6 +4126,13 @@ class MP_Mapping:
                         ws.append(["TRUE","FALSE","FALSE","FALSE",0,0,0,0,k,d,loc + " [WH]",0,0])
                     else: # loc in Q_DPs
                         ws.append(["TRUE","FALSE","FALSE","FALSE",0,0,0,0,k,d,loc,0,0])
+                for dp in self.Q_DPs:
+                    if dp in self.GCMF_Ports:
+                        for sk in self.Q_GCMF_Commodities:
+                            if (dp,sk) not in self.Q_GCMF:
+                                k = sk + "_GCMF [Non GMO]"
+                                d = add_months(self.Q_Start_Planning,6)
+                                ws.append(["TRUE","FALSE","FALSE","FALSE",0,0,0,0,k,d,dp,0,0])
 
                 # Donations
                 if baseline == 0:
@@ -4010,6 +4141,8 @@ class MP_Mapping:
                         mt = self.Donation[don,sk,o,aod,dur,cor,c,p]
                         if mt < 0.1:
                             continue
+                        if aod < self.Q_Start_Planning:
+                            aod = self.Q_Start_Planning
                         k = sk + "_" + c + "_" + p + " [Non GMO]"
                         d = add_months(aod,dur-1)
                         ik_coms.append((k,d))
@@ -4027,6 +4160,10 @@ class MP_Mapping:
             path0 = os.path.join(self.data_dir,"MP_Feedbacks.xlsx")
             path1 = os.path.join(self.dest_dir,"MP_Feedbacks.xlsx")
             wb = xl.load_workbook(filename = path0, read_only=False)
+            # NB: As a rule, feedbacks should always relate to actions
+            # that start during the planning horizon, never before!
+            # to model actions that started in the past, we have
+            # to rely on InventorySupplies
 
             ws_o = wb.get_sheet_by_name("FeedbackPeriodTaskOperations_MP")
             # row = DateTime	Description	FeedbackQuantity	ID	OperationID
@@ -4038,15 +4175,17 @@ class MP_Mapping:
             for don,sk,o,aod,dur,cor,c,p in self.Q_Donation:
                 k = sk + "_" + c + "_" + p + " [Non GMO]"
                 qty = self.Donation[don,sk,o,aod,dur,cor,c,p]
-                if qty == 0:
+                if qty < 0.1:
                     continue
+                if aod < self.Q_Start_Planning:
+                    aod = self.Q_Start_Planning
                 descr = don if don != None else ""
                 if dur > 1: # have some time to pick up the commodity
                     if cor == None: # corridor not specified
                         continue
                         # no feedbacks necessary
                     else: # corridor specified
-                        print "Timing is flexible but corridor isn't - approach tbd"
+                        self.weird.append(("Warning","Donation timing is flexible but corridor isn't - approach tbd"))
                         continue
                         # not sure if this will ever happen?
                 else: # has to move immediately
@@ -4054,14 +4193,18 @@ class MP_Mapping:
                         continue
                         # no feedbacks necessary
                     else: # corridor specified
+                        if (o,cor) not in self.Q_Shipping:
+                            self.weird.append(("No shipping lane",o,cor))
+                            continue
                         if (o,cor) in self.Shipping_Duration.keys():
                             m = int(round(self.Shipping_Duration[o,cor]/31))
-                            arr = add_months(aod,m+1)
+                            arr = add_months(aod,m)
                             arr = datetime.datetime(arr.year,arr.month,1)
-                            if arr < self.Q_Start_Planning:
-                                continue
                         else:
-                            print "No shipping lane found between",o,"and",cor
+                            self.weird.append(("No shipping lead time for donation",don,sk,o,cor))
+                            continue
+                        if cor not in self.GCMF_Ports and self.GCMF_Commodity[c,p,sk]==1 and self.GCMF_Priority=="Hard":
+                            self.weird.append(("Infeasible corridor because of GCMF constraint",o,cor,sk))
                             continue
                         lane = "Ship from " + o + " to " + cor + " in Container"
                         # could consider alternative shipping types
@@ -4072,6 +4215,10 @@ class MP_Mapping:
                 pod = add_months(d,-2)
                 if diff_month(self.Q_Start_Planning,pod) > 0: # PO started before planning horizon
                     continue
+                if p.startswith("S"):
+                    self.weird.append(("Warning","Future GCMF PO - functionality not built yet"))
+                    continue
+                    # NB: This may happens when PO data is more recent than the planning horizon
                 gmo_s = " [GMO]" if gmo==1 else " [Non GMO]"
                 k = sk + "_" + rc + "_" + p + gmo_s
                 o = "Buy " + k + " from " + oc + " at " + ndp
@@ -4114,7 +4261,7 @@ class MP_Mapping:
                     if k0 in self.Q_SpecificCommodities:
                         k = k0 + "_" + c + "_" + p
                     else:
-                        print "<<<WARNING >>> Project-specific sourcing restrictions can only be defined at specific commodity level, not at commodity type level"
+                        self.weird.append(("Warning","Project-specific sourcing restrictions can only be defined at specific commodity level, not at commodity type level"))
                         continue
                 else:
                     k = k0
@@ -4159,6 +4306,7 @@ class MP_Mapping:
             print "Duration: ", "{0:.3f}".format(t_e-t_s), " seconds"
 
         # Execute
+        self.weird = []
         Periods()
         UnitOfMeasures()
         Units()
@@ -4177,6 +4325,8 @@ class MP_Mapping:
         SupplySpecifications()
         Dummy()
         Baseline()
+        print "> Exporting weird occurences to 'Debugging.xlsx'"
+        self.print_to_file(self.weird,"Weird occurences (export)",["Type","Details"])
 
     def export_Optimus(self):
         None
